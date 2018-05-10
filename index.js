@@ -5,18 +5,31 @@ const { mapObjIndexed } = require("ramda");
 const fs = require("fs");
 const path = require("path");
 
-const folder = path.join(__dirname, "test");
-process.chdir(folder);
+processFile(path.resolve(__dirname, "test/in.less"));
 
-fs.readFile("in.less", { encoding: "utf8" }, async (err, data) => {
-  if (err) {
-    console.error(err);
-    process.exit(1);
-  }
-  const jsString = await parse(data);
-  console.log(jsString);
-});
+/**
+ * @param {string} pathName
+ */
+function processFile(pathName) {
+  const dir = path.dirname(pathName);
+  const fileName = path.basename(pathName);
 
+  process.chdir(dir);
+
+  fs.readFile(fileName, { encoding: "utf8" }, async (err, data) => {
+    if (err) {
+      console.error(err);
+      process.exit(1);
+    }
+    const jsString = await parse(data);
+    console.log(jsString);
+  });
+}
+
+/**
+ * @param {string} lessStr
+ * @returns {Promise<string>}
+ */
 async function parse(lessStr) {
   const tree = await less.parse(lessStr);
   const transformed = transformTree(tree);
@@ -113,8 +126,8 @@ function toRuleObject(rule) {
  * @returns {string}
  */
 function toEmotion(ruleObjects) {
-  const localStyles = {};
-  const globalStyles = [];
+  const localStyles = new Map();
+  const globalStyles = new Set();
 
   for (const rule of ruleObjects) {
     if (rule.local) {
@@ -139,24 +152,44 @@ export default function(theme) {
 }
 
 /**
- * @param {string} selector
- * @param {Array<string>} rules
- * @param {Object} localStyles
+ * @typedef {Object} LocalRule
+ * @property {string} name
+ * @property {Map<string, LocalRule>} children
+ * @property {Set<string>} styles
  */
-function processLocalRule(selector, rules, localStyles) {
-  const rulesStr = rules.map(patchVariables).join(";\n  ");
-  const nestedSelectors = selector.split(/\s/);
+
+/**
+ * @param {string} name
+ * @returns {LocalRule}
+ */
+function LocalRule(name) {
+  return {
+    name,
+    children: new Map(),
+    styles: new Set()
+  };
 }
 
 /**
  * @param {string} selector
  * @param {Array<string>} rules
- * @param {Array<string>} globalStyles
+ * @param {Map<string, LocalRule>} localStyles
+ */
+function processLocalRule(selector, rules, localStyles) {
+  const rulesStr = rules.map(patchVariables).join(";\n  ");
+  const nestedSelectors = selector.split(/\s/);
+  const [parent, ...children] = nestedSelectors;
+}
+
+/**
+ * @param {string} selector
+ * @param {Array<string>} rules
+ * @param {Set<string>} globalStyles
  */
 function processGlobalRule(selector, rules, globalStyles) {
   const rulesStr = rules.map(patchVariables).join(";\n  ");
   const styleStr = [`${selector} {`, rulesStr, "};"].join("\n");
-  globalStyles.push(styleStr);
+  globalStyles.add(styleStr);
 }
 
 /**
